@@ -1,0 +1,29 @@
+from launch import LaunchDescription
+from launch_ros.actions import Node
+
+P_SEQ = [
+    4.2, -3.5, 0, 8.9, -0.9, 0, 15, 0, 0, 13.5, 5.9, 0, 7.5, 5.5, 0,
+    11.9, 7, 0, 16.5, 2, 0, 16.9, -3.1, 0, 21.7, -7, 0, 16, -10.5, 0,
+    10.7, -10.9, 0, 15, -6.6, 0, 16.5, -1.8, 0, 11.2, 1.3, 0, 4.4, -2.4, 0,
+    10.9, -1.5, 0, 17.5, -1.4, 0, 14.1, -8.7, 0, 12.7, -12.3, 0, 17.5, -8.5, 0,
+    19.5, -3.5, 0, 11.6, 0.3, 0, 3.8, -2.7, 0, 10.6, -0.6, 0, 16, 0, 0,
+]
+YEA_SEQ = [
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+]
+
+
+def generate_launch_description():
+    return LaunchDescription(
+        [
+            Node(
+                package='drl_vo',
+                executable='publish_goal_sequence',
+                name='publish_goal',
+                output='screen',
+                parameters=[{'p_seq': P_SEQ, 'yea_seq': YEA_SEQ}],
+            )
+        ]
+    )
