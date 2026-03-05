@@ -1,2 +1,2 @@
 #!/bin/sh
-roslaunch drl_vo_nav drl_vo_nav.launch
+ros2 launch drl_vo drl_vo_nav.launch.py

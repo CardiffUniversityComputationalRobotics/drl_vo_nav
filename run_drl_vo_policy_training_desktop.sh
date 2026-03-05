@@ -1,16 +1,12 @@
 #!/bin/sh
 DIR="${1}"
+if [ -z "$DIR" ]; then
+  DIR="./runs"
+fi
 if [ -d "$DIR" ]; then
-  ### Take action if $DIR exists ###
   echo "${DIR} found"
 else
-  ###  Control will jump here if $DIR does NOT exists ###
   echo "${DIR} not found, creating ${DIR}"
-  mkdir ${DIR}
+  mkdir -p "${DIR}"
 fi
-# register gym:
-cd ./drl_vo/src/turtlebot_gym/
-pip install -e .
-cd ../../
-# roslaunch training:
-roslaunch drl_vo_nav drl_vo_nav_train.launch log_dir:="${DIR}"
+ros2 launch drl_vo drl_vo_nav_train.launch.py log_dir:="${DIR}"
