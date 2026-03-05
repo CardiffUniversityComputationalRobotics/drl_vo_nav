@@ -6,8 +6,6 @@
   <maintainer email="xzt@todo.todo">xzt</maintainer>
   <license>MIT</license>
 
-  <buildtool_depend>ament_python</buildtool_depend>
-
   <depend>rclpy</depend>
   <depend>std_msgs</depend>
   <depend>geometry_msgs</depend>
@@ -16,7 +14,7 @@
   <depend>visualization_msgs</depend>
   <depend>gazebo_msgs</depend>
   <depend>pedsim_msgs</depend>
-  <depend>kobuki_msgs</depend>
+  <depend>kobuki_ros_interfaces</depend>
   <depend>action_msgs</depend>
   <depend>nav2_msgs</depend>
   <depend>tf2_ros</depend>
