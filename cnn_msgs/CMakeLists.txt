@@ -1,28 +1,12 @@
-cmake_minimum_required(VERSION 2.8.12)
-
+cmake_minimum_required(VERSION 3.8)
 project(cnn_msgs)
 
-set(CMAKE_CXX_FLAGS "-std=c++11 ${CMAKE_CXX_FLAGS}")
+find_package(ament_cmake REQUIRED)
+find_package(rosidl_default_generators REQUIRED)
 
-find_package(catkin REQUIRED COMPONENTS
-   roscpp
-   rospy
-   std_msgs
-   message_generation
+rosidl_generate_interfaces(${PROJECT_NAME}
+  "msg/CNNData.msg"
 )
 
-add_message_files(
-  FILES
-    CNN_data.msg
-)
-
-
-generate_messages(
-  DEPENDENCIES
-    std_msgs
-)
-
-catkin_package(
-  CATKIN_DEPENDS
-    std_msgs
-)
+ament_export_dependencies(rosidl_default_runtime)
+ament_package()
