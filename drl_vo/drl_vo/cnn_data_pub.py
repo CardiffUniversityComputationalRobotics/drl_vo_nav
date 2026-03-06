@@ -5,7 +5,8 @@ import rclpy
 from rclpy.node import Node
 
 from cnn_msgs.msg import CNNData
-from geometry_msgs.msg import Point, Twist
+from geometry_msgs.msg import Point
+from nav_msgs.msg import Odometry
 from pedsim_msgs.msg import TrackedPersons
 from sensor_msgs.msg import LaserScan
 
@@ -29,7 +30,7 @@ class CnnDataNode(Node):
         self.create_subscription(TrackedPersons, '/track_ped', self.ped_callback, 10)
         self.create_subscription(LaserScan, '/scan', self.scan_callback, 10)
         self.create_subscription(Point, '/cnn_goal', self.goal_callback, 10)
-        self.create_subscription(Twist, '/mobile_base/commands/velocity', self.vel_callback, 10)
+        self.create_subscription(Odometry, '/odom', self.odom_callback, 10)
         self.cnn_data_pub = self.create_publisher(CNNData, '/cnn_data', 1)
 
         self.rate = 20.0
@@ -71,7 +72,10 @@ class CnnDataNode(Node):
         self.goal_cart[0] = goal_msg.x
         self.goal_cart[1] = goal_msg.y
 
-    def vel_callback(self, vel_msg: Twist) -> None:
+    def odom_callback(self, odom_msg: Odometry) -> None:
+
+        vel_msg = odom_msg.twist.twist
+
         self.vel[0] = vel_msg.linear.x
         self.vel[1] = vel_msg.angular.z
 
