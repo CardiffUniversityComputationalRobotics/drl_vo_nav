@@ -29,12 +29,12 @@ def generate_launch_description():
                 ),
                 launch_arguments={'model_file': model_file}.items(),
             ),
-            Node(
-                package='rviz2',
-                executable='rviz2',
-                name='rviz2',
-                output='screen',
-                condition=IfCondition(rviz),
-            ),
+            # Node(
+            #     package='rviz2',
+            #     executable='rviz2',
+            #     name='rviz2',
+            #     output='screen',
+            #     condition=IfCondition(rviz),
+            # ),
         ]
     )
