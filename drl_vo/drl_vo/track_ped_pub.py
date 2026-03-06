@@ -38,7 +38,6 @@ class TrackPedNode(Node):
                         f"/gazebo_spawner/get_entity_state returned success=False: {result.status_message}"
                     )
                 else:
-                    self.get_logger().warn('/gazebo_spawner/get_entity_state successful call')
                     self._robot_state = result.state
             self._pending_state_future = None
 
