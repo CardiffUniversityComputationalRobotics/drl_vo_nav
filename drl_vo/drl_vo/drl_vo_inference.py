@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 
 import numpy as np
 import numpy.matlib
@@ -9,7 +8,7 @@ from rclpy.node import Node
 from cnn_msgs.msg import CNNData
 from stable_baselines3 import PPO
 
-from .custom_cnn_full import CustomCNN
+from drl_vo.custom_cnn_full import CustomCNN
 
 
 policy_kwargs = dict(

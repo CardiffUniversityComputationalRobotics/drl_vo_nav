@@ -28,7 +28,7 @@ from gazebo_msgs.srv import GetModelState, SetModelState
 from nav_msgs.msg import Odometry, OccupancyGrid, Path
 from geometry_msgs.msg import Pose, Twist, Point, PoseStamped, PoseWithCovarianceStamped
 import time
-from kobuki_msgs.msg import BumperEvent
+from kobuki_ros_interfaces.msg import BumperEvent
 from action_msgs.msg import GoalStatusArray
 from pedsim_msgs.msg  import TrackedPersons, TrackedPerson
 from cnn_msgs.msg import CNNData

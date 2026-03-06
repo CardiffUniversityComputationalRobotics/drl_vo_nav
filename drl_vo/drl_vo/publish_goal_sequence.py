@@ -1,11 +1,11 @@
-#!/usr/bin/env python3
+
 
 import math
 
 import rclpy
 from action_msgs.msg import GoalStatus
 from geometry_msgs.msg import Point, Pose, PoseStamped, Quaternion
-from kobuki_msgs.msg import BumperEvent
+from kobuki_ros_interfaces.msg import BumperEvent
 from nav2_msgs.action import NavigateToPose
 from nav_msgs.msg import Odometry
 from rclpy.action import ActionClient
