@@ -1,4 +1,6 @@
 
+import sys
+
 import numpy as np
 import numpy.matlib
 import rclpy
@@ -8,6 +10,7 @@ from rclpy.node import Node
 from cnn_msgs.msg import CNNData
 from stable_baselines3 import PPO
 
+import drl_vo.custom_cnn_full as custom_cnn_full_module
 from drl_vo.custom_cnn_full import CustomCNN
 
 
@@ -27,6 +30,8 @@ class DrlInferenceNode(Node):
 
         self.declare_parameter('model_file', './model/drl_vo.zip')
         model_file = self.get_parameter('model_file').get_parameter_value().string_value
+        # Backward compatibility for models trained with `from custom_cnn_full import CustomCNN`.
+        sys.modules.setdefault('custom_cnn_full', custom_cnn_full_module)
         self.model = PPO.load(model_file)
         self.get_logger().info(f'Loaded model: {model_file}')
 
