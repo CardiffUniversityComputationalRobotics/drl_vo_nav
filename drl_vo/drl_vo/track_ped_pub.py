@@ -1,8 +1,6 @@
-
-
 import numpy as np
 import rclpy
-from gazebo_msgs.srv import GetModelState
+from gazebo_msgs.srv import GetEntityState
 from pedsim_msgs.msg import TrackedPerson, TrackedPersons
 from rclpy.node import Node
 from tf_transformations import euler_from_quaternion
@@ -18,24 +16,44 @@ class TrackPedNode(Node):
             self.ped_callback,
             10,
         )
-        self.get_state_client = self.create_client(GetModelState, '/gazebo/get_model_state')
+        self.get_state_client = self.create_client(GetEntityState, '/gazebo_spawner/get_entity_state')
         self.track_ped_pub = self.create_publisher(TrackedPersons, '/track_ped', 10)
 
+        # Keep latest successful robot state and an in-flight request.
+        self._robot_state = None
+        self._pending_state_future = None
+
     def get_robot_states(self):
-        if not self.get_state_client.wait_for_service(timeout_sec=1.0):
-            self.get_logger().warn('/gazebo/get_model_state service not available')
-            return None
+        # Consume completed request (if any).
+        if self._pending_state_future is not None and self._pending_state_future.done():
+            try:
+                result = self._pending_state_future.result()
+            except Exception as exc:  # noqa: BLE001
+                self.get_logger().warn(f'/gazebo_spawner/get_entity_state service call raised: {exc}')
+            else:
+                if result is None:
+                    self.get_logger().warn('/gazebo_spawner/get_entity_state returned no result')
+                elif not result.success:
+                    self.get_logger().warn(
+                        f"/gazebo_spawner/get_entity_state returned success=False: {result.status_message}"
+                    )
+                else:
+                    self.get_logger().warn('/gazebo_spawner/get_entity_state successful call')
+                    self._robot_state = result.state
+            self._pending_state_future = None
 
-        request = GetModelState.Request()
-        request.model_name = 'mobile_base'
-        request.relative_entity_name = 'world'
+        # Issue a new async request when no request is in flight.
+        if self._pending_state_future is None:
+            if not self.get_state_client.service_is_ready():
+                self.get_logger().warn('/gazebo_spawner/get_entity_state service not available')
+                return self._robot_state
 
-        future = self.get_state_client.call_async(request)
-        rclpy.spin_until_future_complete(self, future, timeout_sec=2.0)
-        if not future.done() or future.result() is None:
-            self.get_logger().warn('/gazebo/get_model_state service call failed')
-            return None
-        return future.result()
+            request = GetEntityState.Request()
+            request.name = 'reachy'
+            request.reference_frame = 'world'
+            self._pending_state_future = self.get_state_client.call_async(request)
+
+        return self._robot_state
 
     def ped_callback(self, peds_msg: TrackedPersons) -> None:
         robot = self.get_robot_states()
