@@ -4,11 +4,16 @@ import threading
 
 import numpy as np
 import rclpy
+from esc_move_base_msgs.msg import Path2D
 from geometry_msgs.msg import Point
-from nav_msgs.msg import Path
 from rclpy.node import Node
 from tf2_ros import Buffer, TransformException, TransformListener
-from tf_transformations import euler_from_quaternion, quaternion_inverse, quaternion_multiply
+from tf_transformations import (
+    euler_from_quaternion,
+    quaternion_from_euler,
+    quaternion_inverse,
+    quaternion_multiply,
+)
 
 
 class PurePursuitNode(Node):
@@ -30,19 +35,23 @@ class PurePursuitNode(Node):
 
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
-        self.create_subscription(Path, 'path', self.path_callback, 10)
+        self.create_subscription(Path2D, 'path', self.path_callback, 10)
         self.cnn_goal_pub = self.create_publisher(Point, 'cnn_goal', 10)
         self.final_goal_pub = self.create_publisher(Point, 'final_goal', 10)
 
         self.timer = None
 
-    def path_callback(self, msg: Path) -> None:
+    def path_callback(self, msg: Path2D) -> None:
         self.get_logger().debug('PurePursuit: Got path')
         with self.lock:
             self.path = msg
 
         if self.timer is None:
             self.timer = self.create_timer(1.0 / self.rate, self.timer_callback)
+
+    def _waypoint_xy(self, idx):
+        waypoint = self.path.waypoints[idx]
+        return np.array([waypoint.x, waypoint.y], dtype=np.float32)
 
     def _lookup_pose(self):
         try:
@@ -68,21 +77,15 @@ class PurePursuitNode(Node):
             return pt_min, dist_min, seg_min
 
         if seg == -1:
-            for i in range(len(self.path.poses) - 1):
+            for i in range(len(self.path.waypoints) - 1):
                 pt, dist, s = self.find_closest_point(x, i)
                 if dist < dist_min:
                     pt_min = pt
                     dist_min = dist
                     seg_min = s
         else:
-            p_start = np.array([
-                self.path.poses[seg].pose.position.x,
-                self.path.poses[seg].pose.position.y,
-            ])
-            p_end = np.array([
-                self.path.poses[seg + 1].pose.position.x,
-                self.path.poses[seg + 1].pose.position.y,
-            ])
+            p_start = self._waypoint_xy(seg)
+            p_end = self._waypoint_xy(seg + 1)
 
             v = p_end - p_start
             length_seg = np.linalg.norm(v)
@@ -111,36 +114,21 @@ class PurePursuitNode(Node):
         if dist > self.lookahead:
             goal = pt
         else:
-            seg_max = len(self.path.poses) - 2
-            p_end = np.array([
-                self.path.poses[seg + 1].pose.position.x,
-                self.path.poses[seg + 1].pose.position.y,
-            ])
+            seg_max = len(self.path.waypoints) - 2
+            p_end = self._waypoint_xy(seg + 1)
             dist_end = np.linalg.norm(x - p_end)
 
             while dist_end < self.lookahead and seg < seg_max:
                 seg += 1
-                p_end = np.array([
-                    self.path.poses[seg + 1].pose.position.x,
-                    self.path.poses[seg + 1].pose.position.y,
-                ])
+                p_end = self._waypoint_xy(seg + 1)
                 dist_end = np.linalg.norm(x - p_end)
 
             if dist_end < self.lookahead:
-                pt = np.array([
-                    self.path.poses[seg_max + 1].pose.position.x,
-                    self.path.poses[seg_max + 1].pose.position.y,
-                ])
+                pt = self._waypoint_xy(seg_max + 1)
             else:
                 pt, dist, seg = self.find_closest_point(x, seg)
-                p_start = np.array([
-                    self.path.poses[seg].pose.position.x,
-                    self.path.poses[seg].pose.position.y,
-                ])
-                p_end = np.array([
-                    self.path.poses[seg + 1].pose.position.x,
-                    self.path.poses[seg + 1].pose.position.y,
-                ])
+                p_start = self._waypoint_xy(seg)
+                p_end = self._waypoint_xy(seg + 1)
                 v = p_end - p_start
                 length_seg = np.linalg.norm(v)
                 if length_seg <= 1e-9:
@@ -154,13 +142,8 @@ class PurePursuitNode(Node):
 
             goal = pt
 
-        end_goal_pos = [self.path.poses[-1].pose.position.x, self.path.poses[-1].pose.position.y]
-        end_goal_rot = [
-            self.path.poses[-1].pose.orientation.x,
-            self.path.poses[-1].pose.orientation.y,
-            self.path.poses[-1].pose.orientation.z,
-            self.path.poses[-1].pose.orientation.w,
-        ]
+        end_goal_pos = [self.path.waypoints[-1].x, self.path.waypoints[-1].y]
+        end_goal_rot = quaternion_from_euler(0.0, 0.0, self.path.waypoints[-1].theta)
         return goal, end_goal_pos, end_goal_rot
 
     def timer_callback(self):
