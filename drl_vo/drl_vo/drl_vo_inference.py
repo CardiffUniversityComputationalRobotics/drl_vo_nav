@@ -49,7 +49,7 @@ class DrlInferenceNode(Node):
         scan = scan[scan != 0]
         min_scan_dist = np.amin(scan) if scan.size != 0 else 10.0
 
-        if np.linalg.norm(self.goal) <= 0.9:
+        if np.linalg.norm(self.goal) <= 0.1:
             cmd_vel.linear.x = 0.0
             cmd_vel.angular.z = 0.0
         elif min_scan_dist <= 0.4:
