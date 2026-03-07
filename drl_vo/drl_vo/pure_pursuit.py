@@ -26,7 +26,7 @@ class PurePursuitNode(Node):
         self.goal_margin = 0.9
 
         self.wheel_base = 0.23
-        self.wheel_radius = 0.025
+        self.wheel_radius = 0.1
         self.v_max = 0.5
         self.w_max = 5.0
 
@@ -35,7 +35,7 @@ class PurePursuitNode(Node):
 
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
-        self.create_subscription(Path2D, 'path', self.path_callback, 10)
+        self.create_subscription(Path2D, '/esc_move_base_planner/solution_path', self.path_callback, 10)
         self.cnn_goal_pub = self.create_publisher(Point, 'cnn_goal', 10)
         self.final_goal_pub = self.create_publisher(Point, 'final_goal', 10)
 
