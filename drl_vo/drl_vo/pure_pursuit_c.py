@@ -23,7 +23,10 @@ class PurePursuitNode(Node):
         self.lookahead = 1.0
         self.declare_parameter('rate', 20.0)
         self.rate = float(self.get_parameter('rate').value)
-        self.goal_margin = 0.9
+        self.rate = 100
+        self.goal_margin = 0.4
+        self.waypoint_tolerance = 1.0
+        self.final_goal_tolerance = 0.4
 
         self.wheel_base = 0.23
         self.wheel_radius = 0.1
@@ -31,6 +34,7 @@ class PurePursuitNode(Node):
         self.w_max = 5.0
 
         self.path = None
+        self.active_segment_idx = 0
         self.lock = threading.Lock()
 
         self.tf_buffer = Buffer()
@@ -45,6 +49,7 @@ class PurePursuitNode(Node):
         self.get_logger().debug('PurePursuit: Got path')
         with self.lock:
             self.path = msg
+            self.active_segment_idx = 0
 
         if self.timer is None:
             self.timer = self.create_timer(1.0 / self.rate, self.timer_callback)
@@ -67,83 +72,56 @@ class PurePursuitNode(Node):
         (_, _, theta) = euler_from_quaternion(quat)
         return x, theta, quat
 
-    def find_closest_point(self, x, seg=-1):
-        pt_min = np.array([np.nan, np.nan], dtype=np.float32)
-        dist_min = np.inf
-        seg_min = -1
+    def _advance_active_segment(self, x):
+        waypoint_count = len(self.path.waypoints)
+        if waypoint_count < 2:
+            self.active_segment_idx = 0
+            return
 
-        if self.path is None:
-            self.get_logger().warn('Pure Pursuit: No path received yet')
-            return pt_min, dist_min, seg_min
+        seg_max = waypoint_count - 2
+        seg = int(np.clip(self.active_segment_idx, 0, seg_max))
 
-        if seg == -1:
-            for i in range(len(self.path.waypoints) - 1):
-                pt, dist, s = self.find_closest_point(x, i)
-                if dist < dist_min:
-                    pt_min = pt
-                    dist_min = dist
-                    seg_min = s
-        else:
-            p_start = self._waypoint_xy(seg)
-            p_end = self._waypoint_xy(seg + 1)
-
-            v = p_end - p_start
-            length_seg = np.linalg.norm(v)
-            if length_seg <= 1e-9:
-                return p_start, np.linalg.norm(p_start - x), seg
-            v = v / length_seg
-
-            dist_projected = np.dot(x - p_start, v)
-            if dist_projected < 0.0:
-                pt_min = p_start
-            elif dist_projected > length_seg:
-                pt_min = p_end
-            else:
-                pt_min = p_start + dist_projected * v
-
-            dist_min = np.linalg.norm(pt_min - x)
-            seg_min = seg
-
-        return pt_min, dist_min, seg_min
-
-    def find_goal(self, x, pt, dist, seg):
-        goal = None
-        end_goal_pos = None
-        end_goal_rot = None
-
-        if dist > self.lookahead:
-            goal = pt
-        else:
-            seg_max = len(self.path.waypoints) - 2
-            p_end = self._waypoint_xy(seg + 1)
-            dist_end = np.linalg.norm(x - p_end)
-
-            while dist_end < self.lookahead and seg < seg_max:
+        while seg < seg_max:
+            next_wp = self._waypoint_xy(seg + 1)
+            if np.linalg.norm(x - next_wp) <= self.waypoint_tolerance:
                 seg += 1
-                p_end = self._waypoint_xy(seg + 1)
-                dist_end = np.linalg.norm(x - p_end)
-
-            if dist_end < self.lookahead:
-                pt = self._waypoint_xy(seg_max + 1)
             else:
-                pt, dist, seg = self.find_closest_point(x, seg)
-                p_start = self._waypoint_xy(seg)
-                p_end = self._waypoint_xy(seg + 1)
-                v = p_end - p_start
-                length_seg = np.linalg.norm(v)
-                if length_seg <= 1e-9:
-                    goal = p_end
-                else:
-                    v = v / length_seg
-                    dist_projected_x = np.dot(x - pt, v)
-                    dist_projected_y = np.linalg.norm(np.cross(x - pt, v))
-                    inside = max(self.lookahead ** 2 - dist_projected_y ** 2, 0.0)
-                    pt = pt + (np.sqrt(inside) + dist_projected_x) * v
+                break
 
-            goal = pt
+        self.active_segment_idx = seg
 
+    def _goal_on_active_segment(self, x):
+        waypoint_count = len(self.path.waypoints)
+        if waypoint_count == 1:
+            return self._waypoint_xy(0)
+
+        seg = int(np.clip(self.active_segment_idx, 0, waypoint_count - 2))
+        p_start = self._waypoint_xy(seg)
+        p_end = self._waypoint_xy(seg + 1)
+        v = p_end - p_start
+        length_seg = np.linalg.norm(v)
+        if length_seg <= 1e-9:
+            return p_end
+
+        v = v / length_seg
+        dist_projected = np.dot(x - p_start, v)
+        dist_projected = float(np.clip(dist_projected, 0.0, length_seg))
+        pt = p_start + dist_projected * v
+        step = min(self.lookahead, length_seg - dist_projected)
+        return pt + step * v
+
+    def _select_goal(self, x):
         end_goal_pos = [self.path.waypoints[-1].x, self.path.waypoints[-1].y]
+        end_goal_xy = np.array(end_goal_pos, dtype=np.float32)
         end_goal_rot = quaternion_from_euler(0.0, 0.0, self.path.waypoints[-1].theta)
+
+        if len(self.path.waypoints) == 1:
+            return end_goal_xy, end_goal_pos, end_goal_rot
+
+        if np.linalg.norm(x - end_goal_xy) <= self.final_goal_tolerance:
+            return end_goal_xy, end_goal_pos, end_goal_rot
+
+        goal = self._goal_on_active_segment(x)
         return goal, end_goal_pos, end_goal_rot
 
     def timer_callback(self):
@@ -155,11 +133,11 @@ class PurePursuitNode(Node):
             if np.isnan(x[0]):
                 return
 
-            pt, dist, seg = self.find_closest_point(x)
-            if np.isnan(pt).any():
+            if self.path is None or len(self.path.waypoints) == 0:
                 return
 
-            goal, end_goal_pos, end_goal_rot = self.find_goal(x, pt, dist, seg)
+            self._advance_active_segment(x)
+            goal, end_goal_pos, end_goal_rot = self._select_goal(x)
             if goal is None or end_goal_pos is None:
                 return
 
