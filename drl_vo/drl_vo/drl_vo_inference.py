@@ -52,7 +52,7 @@ class DrlInferenceNode(Node):
         if np.linalg.norm(self.goal) <= 0.1:
             cmd_vel.linear.x = 0.0
             cmd_vel.angular.z = 0.0
-        elif min_scan_dist <= 0.4:
+        elif min_scan_dist <= 0.1:
             cmd_vel.linear.x = 0.0
             cmd_vel.angular.z = 0.7
         else:
