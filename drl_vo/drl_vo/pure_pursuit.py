@@ -7,6 +7,7 @@ import rclpy
 from esc_move_base_msgs.msg import Path2D
 from geometry_msgs.msg import Point
 from rclpy.node import Node
+from std_msgs.msg import Bool
 from tf2_ros import Buffer, TransformException, TransformListener
 from tf_transformations import (
     euler_from_quaternion,
@@ -24,6 +25,7 @@ class PurePursuitNode(Node):
         self.declare_parameter('rate', 20.0)
         self.rate = float(self.get_parameter('rate').value)
         self.goal_margin = 0.9
+        self.goal_reached_distance = 1.0
 
         self.wheel_base = 0.23
         self.wheel_radius = 0.1
@@ -38,6 +40,7 @@ class PurePursuitNode(Node):
         self.create_subscription(Path2D, '/esc_move_base_planner/solution_path', self.path_callback, 10)
         self.cnn_goal_pub = self.create_publisher(Point, 'cnn_goal', 10)
         self.final_goal_pub = self.create_publisher(Point, 'final_goal', 10)
+        self.goal_achieved_pub = self.create_publisher(Bool, '/goal_reached', 10)
 
         self.timer = None
 
@@ -191,6 +194,12 @@ class PurePursuitNode(Node):
         final_goal.z = float(yaw)
         if not np.isnan(final_goal.x) and not np.isnan(final_goal.y):
             self.final_goal_pub.publish(final_goal)
+
+            if np.hypot(final_goal.x, final_goal.y) <= self.goal_reached_distance:
+
+                goal_reached = Bool()
+                goal_reached.data = True
+                self.goal_achieved_pub.publish(goal_reached)
 
 
 def main(args=None):
