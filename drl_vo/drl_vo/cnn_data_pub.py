@@ -64,8 +64,7 @@ class CnnDataNode(Node):
         scan_data[np.isnan(scan_data)] = 0.0
         scan_data[np.isinf(scan_data)] = 0.0
 
-        if scan_data.size >= 900:
-            self.scan_tmp = scan_data[180:900]
+        self.scan_tmp = scan_data[180:900]
         self.scan_all_tmp = scan_data
 
     def goal_callback(self, goal_msg: Point) -> None:
