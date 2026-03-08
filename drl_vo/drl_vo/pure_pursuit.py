@@ -6,6 +6,7 @@ import numpy as np
 import rclpy
 from esc_move_base_msgs.msg import Path2D
 from geometry_msgs.msg import Point
+from nav_msgs.msg import Odometry
 from rclpy.node import Node
 from std_msgs.msg import Bool
 from tf2_ros import Buffer, TransformException, TransformListener
@@ -33,11 +34,13 @@ class PurePursuitNode(Node):
         self.w_max = 5.0
 
         self.path = None
+        self.robot_odom_pos = None
         self.lock = threading.Lock()
 
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
         self.create_subscription(Path2D, '/esc_move_base_planner/solution_path', self.path_callback, 10)
+        self.create_subscription(Odometry, '/odom', self.odom_callback, 10)
         self.cnn_goal_pub = self.create_publisher(Point, 'cnn_goal', 10)
         self.final_goal_pub = self.create_publisher(Point, 'final_goal', 10)
         self.goal_achieved_pub = self.create_publisher(Bool, '/goal_reached', 10)
@@ -51,6 +54,13 @@ class PurePursuitNode(Node):
 
         if self.timer is None:
             self.timer = self.create_timer(1.0 / self.rate, self.timer_callback)
+
+    def odom_callback(self, msg: Odometry) -> None:
+        with self.lock:
+            self.robot_odom_pos = np.array([
+                msg.pose.pose.position.x,
+                msg.pose.pose.position.y,
+            ], dtype=np.float32)
 
     def _waypoint_xy(self, idx):
         waypoint = self.path.waypoints[idx]
@@ -166,6 +176,8 @@ class PurePursuitNode(Node):
             if goal is None or end_goal_pos is None:
                 return
 
+            robot_odom_pos = None if self.robot_odom_pos is None else self.robot_odom_pos.copy()
+
         map_t_robot = np.array([
             [np.cos(theta), -np.sin(theta), x[0]],
             [np.sin(theta), np.cos(theta), x[1]],
@@ -195,7 +207,13 @@ class PurePursuitNode(Node):
         if not np.isnan(final_goal.x) and not np.isnan(final_goal.y):
             self.final_goal_pub.publish(final_goal)
 
-            if np.hypot(final_goal.x, final_goal.y) <= self.goal_reached_distance:
+            if robot_odom_pos is not None:
+                end_goal_xy = np.array(end_goal_pos, dtype=np.float32)
+                dist_to_final_waypoint = np.linalg.norm(robot_odom_pos - end_goal_xy)
+            else:
+                dist_to_final_waypoint = np.inf
+
+            if dist_to_final_waypoint <= self.goal_reached_distance:
 
                 goal_reached = Bool()
                 goal_reached.data = True
