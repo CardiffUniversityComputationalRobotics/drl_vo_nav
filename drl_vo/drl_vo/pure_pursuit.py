@@ -28,6 +28,8 @@ class PurePursuitNode(Node):
         self.goal_margin = 0.9
         self.goal_reached_distance = 1.0
 
+        self.global_goal = None
+
         self.wheel_base = 0.23
         self.wheel_radius = 0.1
         self.v_max = 0.5
@@ -54,6 +56,11 @@ class PurePursuitNode(Node):
 
         if self.timer is None:
             self.timer = self.create_timer(1.0 / self.rate, self.timer_callback)
+        
+        if self.global_goal is None:
+            self.global_goal = [self.path.waypoints[-1].x, self.path.waypoints[-1].y]
+
+
 
     def odom_callback(self, msg: Odometry) -> None:
         with self.lock:
@@ -207,17 +214,13 @@ class PurePursuitNode(Node):
         if not np.isnan(final_goal.x) and not np.isnan(final_goal.y):
             self.final_goal_pub.publish(final_goal)
 
-            if robot_odom_pos is not None:
-                end_goal_xy = np.array(end_goal_pos, dtype=np.float32)
+            if robot_odom_pos is not None and self.global_goal is not None:
+                end_goal_xy = np.array(self.global_goal, dtype=np.float32)
                 dist_to_final_waypoint = np.linalg.norm(robot_odom_pos - end_goal_xy)
-            else:
-                dist_to_final_waypoint = np.inf
-
-            if dist_to_final_waypoint <= self.goal_reached_distance:
-
-                goal_reached = Bool()
-                goal_reached.data = True
-                self.goal_achieved_pub.publish(goal_reached)
+                if dist_to_final_waypoint <= self.goal_reached_distance:
+                    goal_reached = Bool()
+                    goal_reached.data = True
+                    self.goal_achieved_pub.publish(goal_reached)
 
 
 def main(args=None):
