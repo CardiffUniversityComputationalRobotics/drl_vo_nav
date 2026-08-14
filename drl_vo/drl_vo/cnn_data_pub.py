@@ -11,6 +11,10 @@ from pedsim_msgs.msg import TrackedPersons
 from sensor_msgs.msg import LaserScan
 
 NUM_TP = 10
+SCAN_ALL_SIZE = 1080
+SCAN_CROP_START = 180
+SCAN_CROP_END = 900
+SCAN_CROP_SIZE = SCAN_CROP_END - SCAN_CROP_START
 
 
 class CnnDataNode(Node):
@@ -19,13 +23,14 @@ class CnnDataNode(Node):
 
         self.ped_pos_map = []
         self.scan = []
-        self.scan_all = np.zeros(1080, dtype=np.float32)
+        self.scan_all = np.zeros(SCAN_ALL_SIZE, dtype=np.float32)
         self.goal_cart = np.zeros(2, dtype=np.float32)
         self.vel = np.zeros(2, dtype=np.float32)
 
         self.ped_pos_map_tmp = np.zeros((2, 80, 80), dtype=np.float32)
-        self.scan_tmp = np.zeros(720, dtype=np.float32)
-        self.scan_all_tmp = np.zeros(1080, dtype=np.float32)
+        self.scan_tmp = np.zeros(SCAN_CROP_SIZE, dtype=np.float32)
+        self.scan_all_tmp = np.zeros(SCAN_ALL_SIZE, dtype=np.float32)
+        self._warned_scan_resize = False
 
         self.create_subscription(TrackedPersons, '/track_ped', self.ped_callback, 10)
         self.create_subscription(LaserScan, '/scan', self.scan_callback, 10)
@@ -57,15 +62,36 @@ class CnnDataNode(Node):
                 self.ped_pos_map_tmp[0, r, c] = vx
                 self.ped_pos_map_tmp[1, r, c] = vy
 
+    def _resample_scan(self, scan_data: np.ndarray) -> np.ndarray:
+        if scan_data.size == SCAN_ALL_SIZE:
+            return scan_data
+
+        if not self._warned_scan_resize:
+            self.get_logger().warn(
+                f'/scan has {scan_data.size} ranges; resampling to {SCAN_ALL_SIZE} '
+                'to match the DRL model input shape'
+            )
+            self._warned_scan_resize = True
+
+        if scan_data.size == 0:
+            return np.zeros(SCAN_ALL_SIZE, dtype=np.float32)
+
+        if scan_data.size == 1:
+            return np.full(SCAN_ALL_SIZE, scan_data[0], dtype=np.float32)
+
+        source_idx = np.linspace(0.0, scan_data.size - 1, scan_data.size, dtype=np.float32)
+        target_idx = np.linspace(0.0, scan_data.size - 1, SCAN_ALL_SIZE, dtype=np.float32)
+        return np.interp(target_idx, source_idx, scan_data).astype(np.float32)
+
     def scan_callback(self, laser_scan_msg: LaserScan) -> None:
-        self.scan_tmp = np.zeros(720, dtype=np.float32)
-        self.scan_all_tmp = np.zeros(1080, dtype=np.float32)
+        self.scan_tmp = np.zeros(SCAN_CROP_SIZE, dtype=np.float32)
+        self.scan_all_tmp = np.zeros(SCAN_ALL_SIZE, dtype=np.float32)
         scan_data = np.array(laser_scan_msg.ranges, dtype=np.float32)
         scan_data[np.isnan(scan_data)] = 0.0
         scan_data[np.isinf(scan_data)] = 0.0
 
-        self.scan_tmp = scan_data[180:900]
-        self.scan_all_tmp = scan_data
+        self.scan_all_tmp = self._resample_scan(scan_data)
+        self.scan_tmp = self.scan_all_tmp[SCAN_CROP_START:SCAN_CROP_END]
 
     def goal_callback(self, goal_msg: Point) -> None:
         self.goal_cart[0] = goal_msg.x

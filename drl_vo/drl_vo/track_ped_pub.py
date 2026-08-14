@@ -1,6 +1,6 @@
 import numpy as np
 import rclpy
-from gazebo_msgs.srv import GetEntityState
+from nav_msgs.msg import Odometry
 from pedsim_msgs.msg import TrackedPerson, TrackedPersons
 from rclpy.node import Node
 from tf_transformations import euler_from_quaternion
@@ -16,58 +16,36 @@ class TrackPedNode(Node):
             self.ped_callback,
             10,
         )
-        self.get_state_client = self.create_client(GetEntityState, '/gazebo_spawner/get_entity_state')
+        self.create_subscription(Odometry, '/odom_groundtruth', self.odom_callback, 10)
         self.track_ped_pub = self.create_publisher(TrackedPersons, '/track_ped', 10)
 
-        # Keep latest successful robot state and an in-flight request.
-        self._robot_state = None
-        self._pending_state_future = None
+        self._robot_pose = None
+        self._warned_no_robot_pose = False
 
-    def get_robot_states(self):
-        # Consume completed request (if any).
-        if self._pending_state_future is not None and self._pending_state_future.done():
-            try:
-                result = self._pending_state_future.result()
-            except Exception as exc:  # noqa: BLE001
-                self.get_logger().warn(f'/gazebo_spawner/get_entity_state service call raised: {exc}')
-            else:
-                if result is None:
-                    self.get_logger().warn('/gazebo_spawner/get_entity_state returned no result')
-                elif not result.success:
-                    self.get_logger().warn(
-                        f"/gazebo_spawner/get_entity_state returned success=False: {result.status_message}"
-                    )
-                else:
-                    self._robot_state = result.state
-            self._pending_state_future = None
+    def odom_callback(self, odom_msg: Odometry) -> None:
+        pose = odom_msg.pose.pose
+        robot_q = (
+            pose.orientation.x,
+            pose.orientation.y,
+            pose.orientation.z,
+            pose.orientation.w,
+        )
+        (_, _, yaw) = euler_from_quaternion(robot_q)
+        self._robot_pose = np.array([pose.position.x, pose.position.y, yaw], dtype=np.float32)
 
-        # Issue a new async request when no request is in flight.
-        if self._pending_state_future is None:
-            if not self.get_state_client.service_is_ready():
-                self.get_logger().warn('/gazebo_spawner/get_entity_state service not available')
-                return self._robot_state
+    def get_robot_pose(self):
+        if self._robot_pose is None:
+            if not self._warned_no_robot_pose:
+                self.get_logger().warn('No robot pose received yet on /odom_groundtruth')
+                self._warned_no_robot_pose = True
+            return None
 
-            request = GetEntityState.Request()
-            request.name = 'reachy'
-            request.reference_frame = 'world'
-            self._pending_state_future = self.get_state_client.call_async(request)
-
-        return self._robot_state
+        return self._robot_pose.copy()
 
     def ped_callback(self, peds_msg: TrackedPersons) -> None:
-        robot = self.get_robot_states()
-        if robot is None:
+        robot_pos = self.get_robot_pose()
+        if robot_pos is None:
             return
-
-        robot_pos = np.zeros(3, dtype=np.float32)
-        robot_pos[:2] = np.array([robot.pose.position.x, robot.pose.position.y], dtype=np.float32)
-        robot_q = (
-            robot.pose.orientation.x,
-            robot.pose.orientation.y,
-            robot.pose.orientation.z,
-            robot.pose.orientation.w,
-        )
-        (_, _, robot_pos[2]) = euler_from_quaternion(robot_q)
 
         map_r_robot = np.array(
             [
